@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Team Utilization Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .modal { transition: opacity 0.3s ease, visibility 0.3s ease; }
+    .modal-content { transition: transform 0.3s ease; }
+    .chart-container { position: relative; height: 60vh; width: 100%; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+  <!-- Main Container -->
+  <div class="container mx-auto p-4 md:p-8">
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-gray-900">Team Utilization Tracker</h1>
+      <p class="text-gray-500 mt-2">Monitor your team's weekly performance at a glance.</p>
+    </header>
+
+    <!-- Controls -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <label for="week-selector" class="font-semibold text-gray-600">Week:</label>
+        <select id="week-selector" class="p-2 border rounded-md shadow-sm focus:ring-2 focus:ring-blue-500"></select>
+      </div>
+      <div class="flex flex-wrap justify-center gap-3">
+        <button id="add-member-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors">Add Member</button>
+        <button id="bulk-upload-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors">Bulk Upload</button>
+        <button id="view-trend-btn" class="bg-sky-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-sky-600 transition-colors">Current Week's Trend</button>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="bg-white rounded-xl shadow-lg p-4">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Name</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift Timings</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region Supported</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utilization %</th>
+            </tr>
+          </thead>
+          <tbody id="team-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+        </table>
+        <div id="no-data-message" class="text-center p-8 text-gray-500 hidden">
+          <p class="font-semibold text-lg">No data for this week.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Member Modal -->
+  <div id="add-member-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center invisible opacity-0">
+    <div class="modal-content bg-white rounded-lg p-8 shadow-2xl w-full max-w-md transform scale-95">
+      <h2 id="member-modal-title" class="text-2xl font-bold mb-6">Add New Member</h2>
+      <form id="add-member-form">
+        <div class="mb-4"><input type="text" id="employeeName" placeholder="Employee Name" class="w-full border p-2 rounded" required></div>
+        <div class="mb-4"><input type="text" id="role" placeholder="Role" class="w-full border p-2 rounded" required></div>
+        <div class="mb-4"><input type="text" id="shiftTimings" placeholder="Shift Timings" class="w-full border p-2 rounded" required></div>
+        <div class="mb-4"><input type="text" id="regionSupported" placeholder="Region Supported" class="w-full border p-2 rounded" required></div>
+        <div class="mb-4"><input type="number" id="utilization" placeholder="Utilization %" min="0" max="100" class="w-full border p-2 rounded" required></div>
+        <div class="flex justify-end gap-4">
+          <button type="button" id="cancel-btn" class="bg-gray-200 px-4 py-2 rounded">Cancel</button>
+          <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bulk Upload Modal -->
+  <div id="bulk-upload-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center invisible opacity-0">
+    <div class="modal-content bg-white rounded-lg p-8 shadow-2xl w-full max-w-md transform scale-95 text-center">
+      <h2 class="text-2xl font-bold mb-4">Bulk Upload Members</h2>
+      <p class="text-gray-600 mb-4">Upload a CSV file with columns:  
+      <br><strong>Employee Name, Role, Shift Timings, Region Supported, Utilization%</strong></p>
+      <input type="file" id="csv-file-input" accept=".csv" class="mb-6 block w-full"/>
+      <div class="flex justify-center gap-4">
+        <button type="button" id="bulk-close-btn" class="bg-gray-200 px-4 py-2 rounded">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trend Graph Modal -->
+  <div id="trend-graph-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center invisible opacity-0">
+    <div class="modal-content bg-white rounded-lg p-8 shadow-2xl w-full max-w-4xl transform scale-95">
+      <h2 id="trend-modal-title" class="text-2xl font-bold mb-4">Team Utilization Trend</h2>
+      <canvas id="utilization-chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "YOUR_WEB_APP_URL_HERE"; // Replace with your Apps Script URL
+    let currentWeek = "";
+    let allData = [];
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      populateWeekSelector();
+      await loadData();
+      renderTable();
+
+      document.getElementById("add-member-btn").addEventListener("click", () => openModal("add-member-modal"));
+      document.getElementById("cancel-btn").addEventListener("click", () => closeModal("add-member-modal"));
+      document.getElementById("add-member-form").addEventListener("submit", saveMember);
+      document.getElementById("view-trend-btn").addEventListener("click", renderTrendChart);
+      document.getElementById("week-selector").addEventListener("change", e => { currentWeek = e.target.value; renderTable(); });
+
+      document.getElementById("bulk-upload-btn").addEventListener("click", () => openModal("bulk-upload-modal"));
+      document.getElementById("bulk-close-btn").addEventListener("click", () => closeModal("bulk-upload-modal"));
+      document.getElementById("csv-file-input").addEventListener("change", handleCSVUpload);
+    });
+
+    function populateWeekSelector() {
+      const weekSelector = document.getElementById("week-selector");
+      const startDate = new Date("2025-09-01");
+      for (let i = 0; i < 16; i++) {
+        let monday = new Date(startDate);
+        monday.setDate(monday.getDate() + i * 7);
+        let sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const label = `${monday.toISOString().split("T")[0]} to ${sunday.toISOString().split("T")[0]}`;
+        const opt = document.createElement("option");
+        opt.value = label;
+        opt.textContent = label;
+        weekSelector.appendChild(opt);
+      }
+      currentWeek = weekSelector.value;
+    }
+
+    async function loadData() {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      allData = data.slice(1).map(r => ({
+        week: r[0], name: r[1], role: r[2], shift: r[3], region: r[4], utilization: parseInt(r[5], 10)
+      }));
+    }
+
+    async function saveMember(e) {
+      e.preventDefault();
+      const member = {
+        week: currentWeek,
+        name: document.getElementById("employeeName").value,
+        role: document.getElementById("role").value,
+        shift: document.getElementById("shiftTimings").value,
+        region: document.getElementById("regionSupported").value,
+        utilization: parseInt(document.getElementById("utilization").value, 10)
+      };
+      await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
+      await loadData();
+      renderTable();
+      closeModal("add-member-modal");
+      e.target.reset();
+    }
+
+    async function handleCSVUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const rows = e.target.result.split("\n").filter(r => r.trim() !== "");
+        for (let i = 1; i < rows.length; i++) { // skip header
+          const cols = rows[i].split(",").map(c => c.trim());
+          if (cols.length === 5) {
+            const member = {
+              week: currentWeek,
+              name: cols[0], role: cols[1], shift: cols[2], region: cols[3],
+              utilization: parseInt(cols[4].replace("%",""), 10)
+            };
+            await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
+          }
+        }
+        await loadData();
+        renderTable();
+        closeModal("bulk-upload-modal");
+        event.target.value = ""; // reset file input
+      };
+      reader.readAsText(file);
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("team-table-body");
+      tbody.innerHTML = "";
+      const data = allData.filter(d => d.week === currentWeek);
+      if (!data.length) {
+        document.getElementById("no-data-message").classList.remove("hidden");
+        return;
+      }
+      document.getElementById("no-data-message").classList.add("hidden");
+      data.forEach(m => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="px-6 py-4">${m.name}</td>
+          <td class="px-6 py-4">${m.role}</td>
+          <td class="px-6 py-4">${m.shift}</td>
+          <td class="px-6 py-4">${m.region}</td>
+          <td class="px-6 py-4 font-semibold">${m.utilization}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderTrendChart() {
+      const data = allData.filter(d => d.week === currentWeek);
+      if (!data.length) return alert("No data for this week!");
+      const labels = data.map(d => d.name);
+      const values = data.map(d => d.utilization);
+
+      const ctx = document.getElementById("utilization-chart").getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Utilization %", data: values, backgroundColor: "rgba(54,162,235,0.6)" }] },
+        options: { scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+      openModal("trend-graph-modal");
+    }
+
+    function openModal(id) {
+      const modal = document.getElementById(id);
+      modal.classList.remove("invisible", "opacity-0");
+      modal.querySelector(".modal-content").classList.remove("scale-95");
+    }
+
+    function closeModal(id) {
+      const modal = document.getElementById(id);
+      modal.classList.add("opacity-0");
+      modal.querySelector(".modal-content").classList.add("scale-95");
+      setTimeout(() => modal.classList.add("invisible"), 300);
+    }
+  </script>
+</body>
+</html>
