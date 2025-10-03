@@ -99,12 +99,14 @@
         <button onclick="closeModal('trend-graph-modal')" class="bg-red-500 text-white px-3 py-1 rounded">Close</button>
       </div>
       <canvas id="utilization-chart"></canvas>
+      <!-- Legend -->
       <div id="chart-legend" class="flex justify-center gap-6 mt-6 text-sm font-semibold"></div>
     </div>
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbxCbEjsTSlt9iNszkV7WDNYWJcd1U8sIfRVevWvMUQDLxUiUH2ZqzygXM3fhCshdR6GwA/exec"; 
+
     let currentWeek = "";
     let allData = [];
 
@@ -220,8 +222,8 @@
       data.sort((a, b) => {
         const orderA = roleOrder.indexOf(a.role);
         const orderB = roleOrder.indexOf(b.role);
-        if (orderA !== orderB) return orderA - orderB;
-        return b.utilization - a.utilization;
+        if (orderA !== orderB) return orderA - orderB;        // Designer -> QC -> Lead
+        return b.utilization - a.utilization;                  // Desc within role
       });
 
       if (!data.length) {
@@ -259,6 +261,7 @@
       const values = data.map(d => d.utilization);
       const backgroundColors = data.map(d => roleColors[d.role] || roleColors["Default"]);
 
+      document.getElementById("trend-modal-title").innerText = "Team Utilization Trend (Current Week)";
       drawChart(labels, values, backgroundColors, "Individual Utilization %");
       openModal("trend-graph-modal");
     }
@@ -278,6 +281,7 @@
       const values = labels.map(r => Math.round(roleMap[r].total / roleMap[r].count));
       const backgroundColors = labels.map(r => roleColors[r] || roleColors["Default"]);
 
+      document.getElementById("trend-modal-title").innerText = "Trend by Role (Average – Current Week)";
       drawChart(labels, values, backgroundColors, "Average Utilization % by Role");
       openModal("trend-graph-modal");
     }
@@ -325,10 +329,16 @@
               font: { weight: 'bold' }
             }
           },
-          scales: { y: { beginAtZero: true, max: 105 } }
+          scales: { y: { beginAtZero: true, max: 105 } }  // 105 so 100% labels don’t clip
         },
         plugins: [ChartDataLabels]
       });
+
+      // Legend beneath chart for this view (only Designer & QC)
+      const legendDiv = document.getElementById("chart-legend");
+      legendDiv.innerHTML = ["Designer", "QC"].map(r =>
+        `<span class="flex items-center gap-2"><span style="display:inline-block;width:16px;height:16px;background:${roleColors[r]};border-radius:3px"></span>${r}</span>`
+      ).join("");
 
       document.getElementById("trend-modal-title").innerText = "4 Weeks Trend (Designers & QCs)";
       openModal("trend-graph-modal");
@@ -352,11 +362,12 @@
               font: { weight: 'bold' }
             }
           },
-          scales: { y: { beginAtZero: true, max: 105 } }
+          scales: { y: { beginAtZero: true, max: 105 } }   // keep labels visible at 100%
         },
         plugins: [ChartDataLabels]
       });
 
+      // Legend beneath chart (fixed role order)
       const legendDiv = document.getElementById("chart-legend");
       legendDiv.innerHTML = roleOrder.map(r =>
         `<span class="flex items-center gap-2"><span style="display:inline-block;width:16px;height:16px;background:${roleColors[r]};border-radius:3px"></span>${r}</span>`
@@ -378,7 +389,6 @@
   </script>
 </body>
 </html>
-
 
 
 
