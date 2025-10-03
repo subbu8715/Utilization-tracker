@@ -81,8 +81,7 @@
   <div id="bulk-upload-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center invisible opacity-0">
     <div class="modal-content bg-white rounded-lg p-8 shadow-2xl w-full max-w-md transform scale-95 text-center">
       <h2 class="text-2xl font-bold mb-4">Bulk Upload Members</h2>
-      <p class="text-gray-600 mb-4">Upload a CSV file with columns:  
-      <br><strong>Employee Name, Role, Shift Timings, Region Supported, Utilization%</strong></p>
+      <p class="text-gray-600 mb-4">Upload a CSV file with columns:<br><strong>Employee Name, Role, Shift Timings, Region Supported, Utilization%</strong></p>
       <input type="file" id="csv-file-input" accept=".csv" class="mb-6 block w-full"/>
       <div class="flex justify-center gap-4">
         <button type="button" id="bulk-close-btn" class="bg-gray-200 px-4 py-2 rounded">Close</button>
@@ -99,25 +98,38 @@
   </div>
 
   <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbyH3JPNHb0eALS0f1smM-Sf4XM9N_GyfcrySBWUdOxhsmgo7ZX4J9TqwjKU8AAtUOSXkA/exec"; // Replace with your Apps Script URL
+    // Replace this with your actual Apps Script URL
+    const API_URL = "https://script.google.com/macros/s/AKfycbyH3JPNHb0eALS0f1smM-Sf4XM9N_GyfcrySBWUdOxhsmgo7ZX4J9TqwjKU8AAtUOSXkA/exec"; 
+
     let currentWeek = "";
     let allData = [];
 
-    document.addEventListener("DOMContentLoaded", async () => {
-      populateWeekSelector();
-      await loadData();
-      renderTable();
-
+    document.addEventListener("DOMContentLoaded", () => {
+      // Attach button handlers first
       document.getElementById("add-member-btn").addEventListener("click", () => openModal("add-member-modal"));
       document.getElementById("cancel-btn").addEventListener("click", () => closeModal("add-member-modal"));
       document.getElementById("add-member-form").addEventListener("submit", saveMember);
       document.getElementById("view-trend-btn").addEventListener("click", renderTrendChart);
       document.getElementById("week-selector").addEventListener("change", e => { currentWeek = e.target.value; renderTable(); });
-
       document.getElementById("bulk-upload-btn").addEventListener("click", () => openModal("bulk-upload-modal"));
       document.getElementById("bulk-close-btn").addEventListener("click", () => closeModal("bulk-upload-modal"));
       document.getElementById("csv-file-input").addEventListener("change", handleCSVUpload);
+
+      // Initialize weeks and data
+      populateWeekSelector();
+      initData();
     });
+
+    async function initData() {
+      try {
+        await loadData();
+      } catch (err) {
+        console.error("Failed to load data:", err);
+        alert("⚠️ Could not load data from Google Sheets.\nCheck Web App URL, Sheet tab name, and access permissions.");
+        allData = [];
+      }
+      renderTable();
+    }
 
     function populateWeekSelector() {
       const weekSelector = document.getElementById("week-selector");
@@ -138,7 +150,9 @@
 
     async function loadData() {
       const res = await fetch(API_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("Unexpected response from API");
       allData = data.slice(1).map(r => ({
         week: r[0], name: r[1], role: r[2], shift: r[3], region: r[4], utilization: parseInt(r[5], 10)
       }));
@@ -154,11 +168,15 @@
         region: document.getElementById("regionSupported").value,
         utilization: parseInt(document.getElementById("utilization").value, 10)
       };
-      await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
-      await loadData();
-      renderTable();
-      closeModal("add-member-modal");
-      e.target.reset();
+      try {
+        await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
+        await loadData();
+        renderTable();
+        closeModal("add-member-modal");
+        e.target.reset();
+      } catch (err) {
+        alert("❌ Failed to save member. Check API_URL and permissions.");
+      }
     }
 
     async function handleCSVUpload(event) {
@@ -175,13 +193,17 @@
               name: cols[0], role: cols[1], shift: cols[2], region: cols[3],
               utilization: parseInt(cols[4].replace("%",""), 10)
             };
-            await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
+            try {
+              await fetch(API_URL, { method: "POST", body: JSON.stringify(member) });
+            } catch (err) {
+              console.error("Row upload failed:", err);
+            }
           }
         }
         await loadData();
         renderTable();
         closeModal("bulk-upload-modal");
-        event.target.value = ""; // reset file input
+        event.target.value = "";
       };
       reader.readAsText(file);
     }
@@ -238,4 +260,6 @@
   </script>
 </body>
 </html>
+
+
 
