@@ -34,6 +34,7 @@
         <button id="add-member-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors">Add Member</button>
         <button id="bulk-upload-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors">Bulk Upload</button>
         <button id="view-trend-btn" class="bg-sky-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-sky-600 transition-colors">Current Week's Trend</button>
+        <button id="view-role-trend-btn" class="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-purple-700 transition-colors">Trend by Role</button>
       </div>
     </div>
 
@@ -97,21 +98,31 @@
         <button onclick="closeModal('trend-graph-modal')" class="bg-red-500 text-white px-3 py-1 rounded">Close</button>
       </div>
       <canvas id="utilization-chart"></canvas>
+      <!-- Legend -->
+      <div id="chart-legend" class="flex justify-center gap-6 mt-6 text-sm font-semibold"></div>
     </div>
   </div>
 
   <script>
-    // Replace this with your actual Apps Script URL
-    const API_URL = "https://script.google.com/macros/s/AKfycbxCbEjsTSlt9iNszkV7WDNYWJcd1U8sIfRVevWvMUQDLxUiUH2ZqzygXM3fhCshdR6GwA/exec";
+    const API_URL = "YOUR_DEPLOYED_APPS_SCRIPT_URL"; // replace with your script URL
 
     let currentWeek = "";
     let allData = [];
+
+    const roleOrder = ["Designer", "QC", "Lead"];
+    const roleColors = {
+      "Designer": "rgba(75,192,192,0.7)",
+      "QC": "rgba(255,206,86,0.7)",
+      "Lead": "rgba(255,99,132,0.7)",
+      "Default": "rgba(54,162,235,0.7)"
+    };
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("add-member-btn").addEventListener("click", () => openModal("add-member-modal"));
       document.getElementById("cancel-btn").addEventListener("click", () => closeModal("add-member-modal"));
       document.getElementById("add-member-form").addEventListener("submit", saveMember);
       document.getElementById("view-trend-btn").addEventListener("click", renderTrendChart);
+      document.getElementById("view-role-trend-btn").addEventListener("click", renderRoleTrendChart);
       document.getElementById("week-selector").addEventListener("change", e => { currentWeek = e.target.value; renderTable(); });
       document.getElementById("bulk-upload-btn").addEventListener("click", () => openModal("bulk-upload-modal"));
       document.getElementById("bulk-close-btn").addEventListener("click", () => closeModal("bulk-upload-modal"));
@@ -206,10 +217,10 @@
 
       let data = allData.filter(d => d.week === currentWeek);
 
-      // Sort role-wise, and within role sort by utilization descending
       data.sort((a, b) => {
-        if (a.role < b.role) return -1;
-        if (a.role > b.role) return 1;
+        const orderA = roleOrder.indexOf(a.role);
+        const orderB = roleOrder.indexOf(b.role);
+        if (orderA !== orderB) return orderA - orderB;
         return b.utilization - a.utilization;
       });
 
@@ -235,10 +246,10 @@
     function renderTrendChart() {
       let data = allData.filter(d => d.week === currentWeek);
 
-      // Same sorting as table
       data.sort((a, b) => {
-        if (a.role < b.role) return -1;
-        if (a.role > b.role) return 1;
+        const orderA = roleOrder.indexOf(a.role);
+        const orderB = roleOrder.indexOf(b.role);
+        if (orderA !== orderB) return orderA - orderB;
         return b.utilization - a.utilization;
       });
 
@@ -246,44 +257,60 @@
 
       const labels = data.map(d => `${d.role} - ${d.name}`);
       const values = data.map(d => d.utilization);
-
-      // Role colors
-      const roleColors = {
-        "Designer": "rgba(75,192,192,0.7)",
-        "Lead": "rgba(255,99,132,0.7)",
-        "QC": "rgba(255,206,86,0.7)",
-        "Default": "rgba(54,162,235,0.7)"
-      };
       const backgroundColors = data.map(d => roleColors[d.role] || roleColors["Default"]);
 
-      const ctx = document.getElementById("utilization-chart").getContext("2d");
+      drawChart(labels, values, backgroundColors, "Individual Utilization %");
+      openModal("trend-graph-modal");
+    }
 
-      // Destroy old chart if exists
-      if (window.utilChart) {
-        window.utilChart.destroy();
-      }
+    function renderRoleTrendChart() {
+      let data = allData.filter(d => d.week === currentWeek);
+      if (!data.length) return alert("No data for this week!");
+
+      // group by role and compute average
+      const roleMap = {};
+      data.forEach(d => {
+        if (!roleMap[d.role]) roleMap[d.role] = { total: 0, count: 0 };
+        roleMap[d.role].total += d.utilization;
+        roleMap[d.role].count += 1;
+      });
+
+      const labels = roleOrder.filter(r => roleMap[r]);
+      const values = labels.map(r => Math.round(roleMap[r].total / roleMap[r].count));
+      const backgroundColors = labels.map(r => roleColors[r] || roleColors["Default"]);
+
+      drawChart(labels, values, backgroundColors, "Average Utilization % by Role");
+      openModal("trend-graph-modal");
+    }
+
+    function drawChart(labels, values, backgroundColors, title) {
+      const ctx = document.getElementById("utilization-chart").getContext("2d");
+      if (window.utilChart) window.utilChart.destroy();
 
       window.utilChart = new Chart(ctx, {
         type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Utilization %",
-            data: values,
-            backgroundColor: backgroundColors
-          }]
-        },
+        data: { labels, datasets: [{ label: title, data: values, backgroundColor: backgroundColors }] },
         options: {
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ctx.parsed.y + "%" } }
+            tooltip: { callbacks: { label: ctx => ctx.parsed.y + "%" } },
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              formatter: value => value + "%",
+              font: { weight: 'bold' }
+            }
           },
-          scales: {
-            y: { beginAtZero: true, max: 100 }
-          }
-        }
+          scales: { y: { beginAtZero: true, max: 100 } }
+        },
+        plugins: [ChartDataLabels]
       });
-      openModal("trend-graph-modal");
+
+      // update legend
+      const legendDiv = document.getElementById("chart-legend");
+      legendDiv.innerHTML = roleOrder.map(r =>
+        `<span class="flex items-center gap-2"><span style="display:inline-block;width:16px;height:16px;background:${roleColors[r]};border-radius:3px"></span>${r}</span>`
+      ).join("");
     }
 
     function openModal(id) {
@@ -301,6 +328,7 @@
   </script>
 </body>
 </html>
+
 
 
 
